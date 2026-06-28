@@ -354,6 +354,28 @@
     color: var(--muted);
     flex: 1;
   }
+  .word-entry-last {
+    background: rgba(139,74,44,0.05);
+    border-radius: 6px;
+    padding: 5px 6px;
+    margin: 0 -6px;
+  }
+  .we-bl-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    opacity: 0.25;
+    padding: 0 2px;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .we-bl-btn:hover { opacity: 1; }
+  .we-bl-badge {
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
   .word-entry .we-word {
     font-weight: 600;
     color: var(--forest);
@@ -502,6 +524,72 @@
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-thumb { background: var(--ivory2); border-radius: 2px; }
 
+  /* ── BLACKLIST ── */
+  .blacklist-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(179,58,58,0.12);
+    font-size: 0.88rem;
+  }
+  .blacklist-entry:last-child { border-bottom: none; }
+  .blacklist-entry .bl-word {
+    flex: 1;
+    font-weight: 600;
+    color: var(--red);
+    font-family: 'Playfair Display', serif;
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(179,58,58,0.4);
+  }
+  .blacklist-entry .bl-word:hover { opacity: 0.75; }
+  .blacklist-entry .bl-remove {
+    background: rgba(179,58,58,0.12);
+    border: 1px solid rgba(179,58,58,0.3);
+    border-radius: 6px;
+    color: var(--red);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 2px 7px;
+    line-height: 1.4;
+    flex-shrink: 0;
+  }
+  .blacklist-entry .bl-remove:hover { background: var(--red); color: #fff; }
+  .blacklist-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1.5px dashed rgba(179,58,58,0.35);
+    border-radius: 8px;
+    color: var(--red);
+    font-size: 0.8rem;
+    padding: 6px 10px;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 8px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .blacklist-add-btn:hover { background: rgba(179,58,58,0.05); border-color: var(--red); }
+  .blacklist-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(179,58,58,0.07);
+    border: 1.5px dashed rgba(179,58,58,0.3);
+    border-radius: 10px;
+    color: var(--red);
+    font-size: 0.82rem;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .blacklist-toggle:hover { background: rgba(179,58,58,0.12); }
+
   /* loading spinner */
   .spinner {
     display: inline-block;
@@ -576,6 +664,19 @@
   <div class="word-log" id="word-log">
     <div class="word-log-title">📋 Cuvinte folosite</div>
     <div id="word-entries"><p class="text-muted" style="font-size:0.82rem;">Niciun cuvânt încă.</p></div>
+  </div>
+
+  <!-- Lista neagră -->
+  <div class="word-log" id="blacklist-panel" style="display:none;">
+    <div class="word-log-title" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>🚫 Nu încap în valiză</span>
+      <button class="btn btn-icon" style="font-size:0.72rem;padding:3px 8px;" onclick="toggleBlacklist()">▲ Ascunde</button>
+    </div>
+    <div id="blacklist-entries"></div>
+    <div class="flex-row mt8" id="blacklist-add-row" style="display:none;">
+      <input type="text" id="blacklist-input" placeholder="Adaugă manual..." maxlength="40" style="font-size:0.85rem;">
+      <button class="btn btn-danger" style="padding:8px 12px;font-size:0.85rem;" onclick="addToBlacklist()">+</button>
+    </div>
   </div>
 
 </div>
@@ -716,6 +817,8 @@ function startGame() {
     players: setupPlayers.map(p => ({ name: p.name, alive: true, wordsPlayed: 0 })),
     currentIdx: 0,
     words: [],        // [{word, player}]
+    blacklist: [],    // cuvinte respinse permanent
+    lastRejectedWord: null, // ultimul cuvânt respins de valiză (pentru butonul de adăugare)
     round: 1,
     active: true,
     startedAt: new Date().toISOString()
@@ -763,12 +866,21 @@ function renderWordLog() {
     el.innerHTML = '<p class="text-muted" style="font-size:0.82rem;">Niciun cuvânt încă.</p>';
     return;
   }
-  el.innerHTML = [...g.words].reverse().map((w,i) => `
-    <div class="word-entry">
+  const lastWord = g.words.length > 0 ? g.words[g.words.length - 1] : null;
+  el.innerHTML = [...g.words].reverse().map((w,i) => {
+    const isLast = i === 0; // reversed, so i===0 is the last word
+    const inBlacklist = g.blacklist.includes(w.word);
+    const showBtn = isLast && !inBlacklist;
+    const showBadge = inBlacklist;
+    return `
+    <div class="word-entry${isLast ? ' word-entry-last' : ''}">
       <span class="we-num">${g.words.length - i}.</span>
       <a class="we-word" href="https://dexonline.ro/definitie/${encodeURIComponent(w.word.toLowerCase())}" target="_blank" rel="noopener" title="Vezi în DEX">${escHtml(w.word)}</a>
       <span class="we-player">${escHtml(w.player)}</span>
-    </div>`).join('');
+      ${showBadge ? `<span class="we-bl-badge" title="În lista neagră">🚫</span>` : ''}
+      ${showBtn ? `<button class="we-bl-btn" onclick="addWordToBlacklist('${escHtml(w.word)}')" title="Adaugă în lista neagră">🚫</button>` : ''}
+    </div>`;
+  }).join('');
   // scroll to top (newest)
   document.getElementById('word-log').scrollTop = 0;
 }
@@ -783,6 +895,13 @@ async function submitWord() {
   inp.value = '';
 
   if (!word) return;
+
+  // 0. Verifică lista neagră
+  if (game.blacklist.includes(word)) {
+    showFeedback('warn', '🚫', `„${word}" e pe lista neagră — nu încape în valiză! Încearcă alt cuvânt.`);
+    inp.focus();
+    return;
+  }
 
   // 1. Verifică litera
   if (word[0] !== game.letter) {
@@ -816,7 +935,9 @@ async function submitWord() {
   if (dexResult.isNoun) {
     const suitcaseResult = checkSuitcase(word);
     if (!suitcaseResult.fits) {
+      game.lastRejectedWord = word;
       showFeedback('warn', '🧳', `Nu încape! ${suitcaseResult.reason} Încearcă alt obiect!`);
+      showBlacklistOffer(word);
       inp.focus();
       return;
     }
@@ -950,6 +1071,8 @@ function checkSuitcase(word) {
 // ════════════════════════════════════════════
 function advanceTurn() {
   const g = game;
+  g.lastRejectedWord = null; // expiră oferta de blacklist
+  hideBlacklistOffer();
   // Găsim următorul jucător viu
   let next = (g.currentIdx + 1) % g.players.length;
   let tries = 0;
@@ -1073,6 +1196,110 @@ function renderHistory() {
       <div class="session-words">📝 ${s.totalWords} cuvinte jucate</div>
     </div>`;
   }).join('');
+}
+
+// ════════════════════════════════════════════
+//  BLACKLIST
+// ════════════════════════════════════════════
+function addWordToBlacklist(word) {
+  if (!game || game.blacklist.includes(word)) return;
+
+  // Găsim cine a spus ultimul cuvânt
+  const lastEntry = game.words[game.words.length - 1];
+  if (!lastEntry || lastEntry.word !== word) return; // siguranță
+
+  // Scoatem cuvântul din lista de cuvinte acceptate
+  game.words.pop();
+
+  // Adăugăm în blacklist
+  game.blacklist.push(word);
+
+  // Revenim la jucătorul care a propus cuvântul
+  const playerIdx = game.players.findIndex(p => p.name === lastEntry.player);
+  if (playerIdx !== -1) {
+    game.currentIdx = playerIdx;
+    game.players[playerIdx].wordsPlayed = Math.max(0, game.players[playerIdx].wordsPlayed - 1);
+  }
+
+  // Feedback și re-render
+  showFeedback('warn', '🚫', `„${word}" adăugat în lista neagră! ${lastEntry.player} trebuie să propună alt cuvânt.`);
+  renderBlacklist();
+  document.getElementById('blacklist-panel').style.display = '';
+
+  // Update turn label și log
+  document.getElementById('turn-player-name').textContent = lastEntry.player;
+  renderWordLog();
+
+  // Focus input
+  setTimeout(() => document.getElementById('word-input').focus(), 100);
+}
+
+function showBlacklistOffer(word) {
+  const panel = document.getElementById('blacklist-panel');
+  panel.style.display = '';
+  renderBlacklist();
+  // Arată butonul de adăugare rapidă
+  const addRow = document.getElementById('blacklist-add-row');
+  const inp = document.getElementById('blacklist-input');
+  addRow.style.display = 'flex';
+  inp.value = word;
+  inp.placeholder = `Adaugă „${word}" în lista neagră...`;
+}
+
+function hideBlacklistOffer() {
+  const addRow = document.getElementById('blacklist-add-row');
+  if (addRow) addRow.style.display = 'none';
+  const inp = document.getElementById('blacklist-input');
+  if (inp) inp.value = '';
+}
+
+function toggleBlacklist() {
+  const panel = document.getElementById('blacklist-panel');
+  const btn = panel.querySelector('button');
+  const entries = document.getElementById('blacklist-entries');
+  const addRow = document.getElementById('blacklist-add-row');
+  const collapsed = entries.style.display === 'none';
+  entries.style.display = collapsed ? '' : 'none';
+  if (addRow) addRow.style.display = collapsed ? 'flex' : 'none';
+  btn.textContent = collapsed ? '▲ Ascunde' : '▼ Arată';
+}
+
+function addToBlacklist() {
+  if (!game) return;
+  const inp = document.getElementById('blacklist-input');
+  const word = inp.value.trim().toUpperCase();
+  if (!word) return;
+  if (!game.blacklist.includes(word)) {
+    game.blacklist.push(word);
+    renderBlacklist();
+  }
+  inp.value = '';
+  hideBlacklistOffer();
+}
+
+function removeFromBlacklist(idx) {
+  if (!game) return;
+  game.blacklist.splice(idx, 1);
+  renderBlacklist();
+  if (!game.blacklist.length) {
+    document.getElementById('blacklist-panel').style.display = 'none';
+  }
+}
+
+function renderBlacklist() {
+  const g = game;
+  const el = document.getElementById('blacklist-entries');
+  const panel = document.getElementById('blacklist-panel');
+  if (!g || !g.blacklist.length) {
+    el.innerHTML = '<p class="text-muted" style="font-size:0.82rem;padding:4px 0;">Lista e goală.</p>';
+    return;
+  }
+  panel.style.display = '';
+  el.innerHTML = g.blacklist.map((w,i) => `
+    <div class="blacklist-entry">
+      <a class="bl-word" href="https://dexonline.ro/definitie/${encodeURIComponent(w.toLowerCase())}" target="_blank" rel="noopener">${escHtml(w)}</a>
+      <button class="bl-remove" onclick="removeFromBlacklist(${i})" title="Șterge din listă">✕</button>
+    </div>`).join('');
 }
 
 // ════════════════════════════════════════════
